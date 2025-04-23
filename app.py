@@ -1,54 +1,30 @@
-from flask import Flask, request, jsonify, send_file
-import youtube_dl
-import os
+from flask import Flask, request, jsonify
 from pytube import YouTube
-import uuid
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "YouTube Downloader API is Active!"
-
-@app.route('/info', methods=['GET'])
-def info():
-    url = request.args.get('url')
-    if not url:
-        return jsonify({'error': 'URL missing'}), 400
-    try:
-        yt = YouTube(url)
-        data = {
-            'title': yt.title,
-            'thumbnail': yt.thumbnail_url,
-            'length': yt.length,
-            'author': yt.author
-        }
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({"message": "YouTube Downloader API is running!"})
 
 @app.route('/download', methods=['GET'])
-def download():
+def download_video():
     url = request.args.get('url')
-    fmt = request.args.get('format', 'mp4')
     if not url:
-        return jsonify({'error': 'URL missing'}), 400
+        return jsonify({'error': 'URL is missing'}), 400
+
     try:
         yt = YouTube(url)
-        file_id = str(uuid.uuid4())
-        filename = f"{file_id}.{fmt}"
-        if fmt == 'mp3':
-            audio_stream = yt.streams.filter(only_audio=True).first()
-            audio_stream.download(filename=filename)
-        else:
-            video_stream = yt.streams.get_highest_resolution()
-            video_stream.download(filename=filename)
-        return send_file(filename, as_attachment=True)
+        stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+        download_link = stream.url
+
+        return jsonify({
+            'title': yt.title,
+            'author': yt.author,
+            'download_url': download_link,
+            'filesize': stream.filesize,
+            'resolution': stream.resolution
+        })
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    finally:
-        if os.path.exists(filename):
-            os.remove(filename)
-
-if __name__ == '__main__':
-    app.run(debug=True)
